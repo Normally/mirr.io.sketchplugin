@@ -1,0 +1,570 @@
+/*
+* Mirr.io plugin for Sketch.app
+* Author: Normally
+*/
+
+@import 'ui.js';
+
+var transitionTypes = [
+	"(default)",
+	"To",
+	"Fade",
+	"Slide From Right",
+	"Slide From Left",
+	"Slide From Bottom",
+	"Slide From Top",
+	"Overlay",
+	"Overlay Fade",
+	"Overlay From Right",
+	"Overlay From Left",
+	"Overlay From Bottom",
+	"Overlay From Top",
+	"Back"
+];
+var transitionValues = [
+	"(default)",
+	"to",
+	"fade",
+	"slide-left",
+	"slide-right",
+	"slide-up",
+	"slide-down",
+	"overlay",
+	"overlay-fade",
+	"overlay-left",
+	"overlay-right",
+	"overlay-up",
+	"overlay-down",
+	"back"
+];
+var eventTypes = [
+	'Tap',
+	'Swipe Left',
+	'Swipe Right',
+	'Swipe Up',
+	'Swipe Down',
+	'Swipe Horizontal',
+	'Swipe Vertical'
+];
+var eventValues = [
+	'tap',
+	'swipe-left',
+	'swipe-right',
+	'swipe-up',
+	'swipe-down',
+	'swipe-horizontal',
+	'swipe-vertical'
+];
+
+// Globals
+var isArtboard,
+	isInSymbols,
+	cont,
+	command,
+	viewBox, 
+	eventSelectNew, 
+	transitionSelectNew, 
+	artboardSelectNew, 
+	artboardSelectNew2,
+	doc, view;
+
+// Run from plugin menu
+
+function openMirrio(context){
+	var doc = context.document;
+	var path = [[doc fileURL] path];
+	[coscript system:"Open -a /Applications/Mirr.io.app '"+path+"'"];
+}
+
+// Manage the token in the layer
+
+var _TOKEN = '🔸';
+var trimToken = function(value){
+	if(hasToken(value)){
+		return value.split('(')[0].split(_TOKEN)[1].trim();
+	}else{
+		return value.split('(')[0].trim();
+	}
+};
+var hasToken = function(value){
+	return value.indexOf(_TOKEN)!==-1;
+};
+
+
+function addTransition(context){
+	cont = context;
+
+	doc = context.document;
+	var selection = context.selection;
+	command = context.command;
+	var plugin = context.plugin;
+	var pages = [doc pages];
+	var page = [doc currentPage];
+	view = [doc currentView];
+	var artboards = [[doc currentPage] artboards];
+	var numArtboards = [artboards count];
+
+
+
+	// var newRect = NSMakeRect(0, 0, 100, 200);
+	// view.zoomToFitRect(newRect);
+
+	// If there's no selection
+	if ([selection count] == 0) {
+		doc.displayMessage("Mirr.io - Please select a Layer or Artboard");
+		return;
+	}
+
+	// Are we dealing with artboards or Layers?
+	var selectionTypes = {};
+	for(var i = 0 ; i < [selection count] ; i++){
+		var sel = selection[i];
+		var isAB = [sel isMemberOfClass:[MSArtboardGroup class]];
+		selectionTypes[(isAB ? 'artboard' : 'layer')] = true;
+	}
+
+	if(selectionTypes.layer && selectionTypes.artboard){
+		doc.displayMessage("Mirr.io - Please select Layers or Artboards. Not both.");
+		return;
+	}
+	isArtboard = selectionTypes.artboard;
+	
+
+
+	// Get the current Artboard
+	var selected_artboard = [selection objectAtIndex:0];
+	while ([selected_artboard parentGroup] != page) {
+		selected_artboard = [selected_artboard parentGroup];
+	}
+
+	isInSymbols = selected_artboard.className() == 'MSSymbolMaster';
+
+	var selectedArtboardName = [selected_artboard name];
+	var selectedArtboardID = String(selected_artboard.objectID());
+	selectedArtboardName = trimToken(selectedArtboardName);
+
+
+	// get the first selection
+	var layer = selection[0];
+	var layerNameOriginal = [layer name];
+	var layerName = trimToken(layerNameOriginal);
+
+
+	// Get it's meta...
+	var currentMeta = [command valueForKey:"mirrio" onLayer:layer];
+
+	if(currentMeta){
+		try{
+			currentMeta = JSON.parse(currentMeta);
+		}catch(err){
+			log("Couldn't parse the meta");
+			currentMeta = null
+		}
+	}
+
+
+	// If we don't have a token but still have meta data, reset everything. User must have manually removed the token
+	if(currentMeta && !hasToken(layerNameOriginal)){
+		[command setValue:null forKey:"mirrio" onLayer:layer];
+		currentMeta = null;
+	}
+
+
+
+	// Parse the current meta data
+	current = currentMeta; //label.parse(currentMeta);
+	log(current);
+
+	// Get ALL artboard names
+	var artboardNames = [];
+	var artboardValues = [];
+	var selectedArtboardIndex = 0;
+	var currentIndex = 0;
+
+	// If this action is contained in a symbol we need to add page names too...
+	if(isInSymbols){
+		for (var i = 0; i < doc.pages().count(); i++) {
+		  var page = doc.pages().objectAtIndex(i);
+		  var pageName = page.name();
+		  if(pageName!='Symbols'){
+
+		  		artboardNames.push('▼ ' +pageName);
+		  		artboardValues.push({});
+
+			  for (var j = 0; j < page.artboards().count(); j++) {
+			    var artboard = page.artboards().objectAtIndex(j);
+				var artboardName = artboard.name(); 
+				artboardName = trimToken(artboardName);	
+				var artboardID = String(artboard.objectID());
+				artboardNames.push(artboardName);
+
+				artboardValues.push({
+					name:artboardName,
+					artboardID:artboardID
+				});
+
+			  }
+			}
+
+		}
+		currentIndex = 1;
+
+	}else{
+
+		for(var i=0; i< [artboards count]; i++){
+	    	var artboard = artboards[i];
+	    	var artboardName = String(artboard.name()); 
+	    	var artboardID = String(artboard.objectID());
+
+	    	artboardName = trimToken(artboardName);	
+
+
+	    	if(selectedArtboardID != artboardID){
+		    	artboardNames.push(artboardName);
+				artboardValues.push({
+					name:artboardName,
+					artboardID:artboardID
+				});
+	    	}
+	    }
+	}
+
+
+    createWindow({
+    	selection: 				selection,
+    	selectionCount:			[selection count],
+    	firstSelectionName: 	layerName,
+    	layer:					layer,
+    	artboard: 				selected_artboard,
+    	artboardNames: 			artboardNames,
+    	artboardValues:			artboardValues,
+    	selectedArtboardName: 	selectedArtboardName,
+    	selectedArtboardID:		selectedArtboardID,
+    	selectedArtboardIndex: 	selectedArtboardIndex,
+    	currentIndex:			currentIndex,
+    	current: 				current,
+    	isArtboard: 			isArtboard,
+    	view: 					view
+    });
+
+	return;
+	
+}
+
+function generateLabel(){
+
+	// Create the command for mirrio
+	var choice = getData();
+
+	var action = choice.transition;
+
+	if(choice.transition == '(default)'){
+		var evSplit = choice.event.split('-');
+		if(evSplit[0]=='swipe'){
+			action = 'slide-'+evSplit[1];
+		}
+	}
+
+	var to = 		choice.artboard.artboardID;
+	var toName = 	choice.artboard.name
+	var evt = 		choice.event;
+
+	if(evt == 'swipe-horizontal' || evt == 'swipe-vertical'){
+		to = [
+			choice.artboard.artboardID,
+			choice.artboard2.artboardID
+		];
+		action = choice.transition== '(default)' ? 'slide' : action;
+		toName = [
+			choice.artboard.name,
+			choice.artboard2.name
+		];
+	}
+
+	if(isArtboard){
+		evt = 'timer';
+	}
+
+	var obj = {
+		action: 	action,
+		event: 		evt,
+		to: 		to,
+		duration: 	choice.duration*1000 || null,
+		toName: 	toName
+	};
+
+
+	return obj;
+
+}
+
+
+function selectionLogic(){
+		var eventID = eventSelectNew.index();
+
+		if(eventID > 4){
+			viewBox.add(artboardSelectNew2);
+		}else{
+			viewBox.remove(artboardSelectNew2);
+		}
+
+		if(eventID > 0){
+			transitionSelectNew.enable(0, true);
+		}else{
+			transitionSelectNew.enable(0, false);
+		}
+
+		if(eventID<5){
+			artboardSelectNew.setLabel('To Artboard:');
+		}else{
+			artboardSelectNew.setLabel('To Artboard: ('+(eventID==5 ? 'left' : 'up' )+')');
+			artboardSelectNew2.setLabel('To Artboard: ('+(eventID==5 ? 'right' : 'down' )+')');
+		}
+
+		if(transitionSelectNew.value() == 'back'){
+			viewBox.remove(artboardSelectNew);
+			viewBox.remove(artboardSelectNew2);
+		}else{
+			viewBox.add(artboardSelectNew);
+		}
+}
+
+
+
+var getData = function(){
+	return {
+		artboard: artboardSelectNew.value(),
+		artboard2: artboardSelectNew2.value(),
+		transition: transitionSelectNew.value(),
+		duration: durationNew.value(),
+		event: eventSelectNew.value()
+	};
+};
+
+function createWindow(options){
+
+	// Create the selectors
+
+	var current = options.current;
+
+	eventSelectNew = new ui.createRow({
+		items: eventTypes,
+		values: eventValues,
+		index: 0,
+		label: {
+			title:"Event:",
+			bold: true
+		},
+		y: 180,
+		onchange: function(sender){
+			var id = [sender indexOfSelectedItem];
+			
+			if(id>0){
+				transitionSelectNew.select(0);
+			}else{
+				transitionSelectNew.select(3);
+			}
+			selectionLogic();
+		}
+	});
+
+	durationNew = new ui.createInputRow({
+		label: {
+			title:"Duration:",
+			bold: true
+		},
+		y: 180
+	});
+
+	transitionSelectNew = new ui.createRow({
+		items: transitionTypes,
+		values: transitionValues,
+		index: 0,
+		label: {
+			title:"Transition:",
+			bold: true
+		},
+		y: 130,
+		onchange: selectionLogic
+	});
+
+	artboardSelectNew = new ui.createRow({
+		items: options.artboardNames,
+		values: options.artboardValues,
+		index: 0,
+		label: {
+			title:"Artboard:",
+			bold: true
+		},
+		y: 80
+	});
+
+	artboardSelectNew2 = new ui.createRow({
+		items: options.artboardNames,
+		values: options.artboardValues,
+		index: 0,
+		label: {
+			title:"Artboard:",
+			bold: true
+		},
+		y: 30
+	});
+
+	// Create a box to add the selectors
+
+	viewBox = new ui.view({
+		height:240,
+		x: 35,
+		y: 40
+	});
+
+	var dividerTop = new ui.divider({
+		divider:{
+			y: 230
+		}
+	});
+
+	viewBox.add(dividerTop);
+	viewBox.add(transitionSelectNew);
+	viewBox.add(artboardSelectNew);
+
+
+
+	// Different view for artboard events
+
+	if(options.isArtboard){
+		viewBox.add(durationNew);
+	}else{
+		viewBox.add(eventSelectNew);
+	}
+	
+	for(var i = 0 ; i < options.artboardValues.length ; i++){
+		if(!Object.keys(options.artboardValues[i]).length){
+			artboardSelectNew.enable(i, false);
+			artboardSelectNew2.enable(i, false);
+		}
+	}
+
+	// Create the alert window
+	var windowType = 'popover';
+	var alert = new ui.alert({
+		type: windowType,
+		accessory: viewBox.get(),
+		artboard: options.artboard,
+		layer: options.layer,
+		selection: options.selection,
+		message: options.isArtboard ? "Add Timer" : "Add Event",
+		info: (options.isArtboard ? "Artboard: " : "Layer: ") + options.firstSelectionName + (options.selectionCount > 1 ? " (+"+(options.selectionCount-1)+" more)" : ""),
+		buttons: [
+			{
+				label:"OK",
+				event: function(){
+
+					// Add actions
+					// Loop through all selections and rename
+
+					var selection = options.selection;
+					for(var i = 0 ; i < [selection count] ; i++){
+						var item = selection[i];
+						var name = [item name];
+						name = trimToken(name);
+						var newName = JSON.stringify(generateLabel());
+						[command setValue:newName forKey:"mirrio" onLayer:item];
+						[item setName: _TOKEN+'' + name];
+					}
+
+					alert.close();
+					[doc saveDocument:self];
+					// [NSApp sendAction:'saveDocument:' to:nil from:doc];
+					
+				}
+			},
+			{
+				label:"Cancel",
+				event: function(){
+					log('cancel');
+					alert.close();
+				}
+			},
+			{
+				label:"Remove",
+				event: function(){
+
+					// Delete action
+					// Loop through all selections and delete
+
+					var selection = options.selection;
+					for(var i = 0 ; i < [selection count] ; i++){
+						var item = selection[i];
+						var name = [item name];
+						name = trimToken(name);
+
+						[command setValue:null forKey:"mirrio" onLayer:item];
+						[item setName:name];
+					}
+					alert.close();
+					[doc saveDocument:self];
+				}
+			}
+		]
+	});
+
+
+	artboardSelectNew.selectWithIndex(options.currentIndex);
+	artboardSelectNew2.selectWithIndex(options.currentIndex);
+
+	// If this layer/artboard already has some meta, prefill the options
+
+	if(current){
+
+		if(current.event!='timer'){
+			eventSelectNew.selectWithValue(current.event);
+		}
+		transitionSelectNew.selectWithValue(current.action=='slide'? '(default)' : current.action);
+
+
+		if(current.to && typeof current.to == 'object'){
+			artboardSelectNew.selectWithValue(current.to[0], 'artboardID');
+			artboardSelectNew2.selectWithValue(current.to[1], 'artboardID');
+		}else if(current.to){
+			artboardSelectNew.selectWithValue(current.to, 'artboardID');
+		}
+
+		if(current.event=='tap'){
+			transitionSelectNew.enable(0, false);
+		}
+
+		var swipeParts = current.event.split('-');
+
+		if(swipeParts[0]=='swipe'){
+			if(swipeParts[1] == current.action.split('-')[1]){
+				transitionSelectNew.selectWithTitle('(default)');
+			}
+			
+		}
+
+		durationNew.value(current.duration ? current.duration/1000 : 3);
+
+		if(current.event=='swipe-vertical' || current.event=='swipe-horizontal'){
+			viewBox.add(artboardSelectNew2);
+		}
+
+	}else{
+		transitionSelectNew.enable(0, false);
+		if(options.isArtboard){
+			durationNew.value(3);
+			transitionSelectNew.select(3);
+		}else{
+			transitionSelectNew.select(3);
+		}
+	}
+
+	selectionLogic();
+
+	if(windowType != 'popover'){
+		[NSApp runModalForWindow:alert];
+	}
+
+
+
+}

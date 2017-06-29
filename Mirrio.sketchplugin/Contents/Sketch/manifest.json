@@ -1,0 +1,35 @@
+{
+  "name": "Mirr.io",
+  "description": "Turn Sketch designs into working prototypes",
+  "author": "Normally LTD",
+  "email": "nic@normally.com",
+  "homepage": "http://mirr.io",
+  "version": 0.1,
+  "identifier": "com.normally.mirrio",
+  "compatibleVersion": "3.3.2",
+  "bundleVersion": 1,
+  "updateURL": "https://raw.githubusercontent.com/Normally/Mirr.io-Sketch-Plugin/master/Mirrio.sketchplugin/Contents/Sketch/manifest.json",
+  "commands": [
+    {
+      "name": "Launch in Mirr.io",
+      "identifier": "openMirrio",
+      "shortcut": "cmd option r",
+      "script": "mirrio.cocoascript",
+      "handler": "openMirrio"
+    },
+  	{
+      "name": "Add Event",
+      "identifier": "addTransition",
+      "shortcut": "cmd option a",
+      "script": "mirrio.cocoascript",
+      "handler": "addTransition"
+    }
+  ],
+  "menu": {
+    "title": "Mirr.io",
+    "items": [
+      "openMirrio",
+      "addTransition"
+    ]
+  }
+}
